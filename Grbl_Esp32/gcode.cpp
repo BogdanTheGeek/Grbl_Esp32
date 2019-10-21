@@ -341,8 +341,10 @@ uint8_t gc_execute_line(char *line, uint8_t client)
 				}
 				break;
 			case 6: // too change	
+				word_bit = MODAL_GROUP_M6;
+				gc_block.modal.tool_change = TOOL_CHANGE;
 				#ifdef USE_TOOL_CHANGE
-					tool_change(gc_state.tool);
+					//tool_change(gc_state.tool);
 				#endif
 				break;
 			case 7:
@@ -605,6 +607,7 @@ uint8_t gc_execute_line(char *line, uint8_t client)
 	// bit_false(value_words,bit(WORD_T)); // NOTE: Single-meaning value word. Set at end of error-checking.
 
 	// [6. Change tool ]: N/A
+	
 	// [7. Spindle control ]: N/A
 	// [8. Coolant control ]: N/A
 	// [9. Enable/disable feed rate or spindle overrides ]: NOT SUPPORTED.
@@ -1190,6 +1193,11 @@ uint8_t gc_execute_line(char *line, uint8_t client)
 	//	gc_state.tool = gc_block.values.t;
 
 	// [6. Change tool ]: NOT SUPPORTED
+	if (gc_block.modal.tool_change == TOOL_CHANGE) {
+		#ifdef USE_TOOL_CHANGE
+			user_tool_change(gc_state.tool);
+		#endif
+	}
 
 	// [7. Spindle control ]:
 	if (gc_state.modal.spindle != gc_block.modal.spindle) {
@@ -1377,6 +1385,9 @@ uint8_t gc_execute_line(char *line, uint8_t client)
 				coolant_set_state(COOLANT_DISABLE);
 			}
 			report_feedback_message(MESSAGE_PROGRAM_END);
+			#ifdef USER_M30
+				user_m30();
+			#endif
 		}
 		gc_state.modal.program_flow = PROGRAM_FLOW_RUNNING; // Reset program flow.
 	}

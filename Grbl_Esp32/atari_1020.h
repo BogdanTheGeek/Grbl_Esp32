@@ -47,12 +47,15 @@
 
 
 #define ATARI_HOME_POS -10.0f // this amound to the left of the paper 0
-#define ATARI_PAPER_WIDTH 100.0f // 
+#define ATARI_PAPER_WIDTH 100.0f //
+#define ATARI_HOMING_ATTEMPTS 13
 
 // tells grbl we have some special functions to call
 #define USE_MACHINE_INIT
 #define USE_CUSTOM_HOMING
 #define USE_TOOL_CHANGE
+#define ATARI_TOOL_CHANGE_Z 5.0
+#define USER_M30 // use the user defined end of program
 
 #ifndef atari_h
 	#define atari_h
@@ -61,8 +64,11 @@
 	void solenoid_disable();
 	void solenoidSyncTask(void *pvParameters);
 	void calc_solenoid(float penZ);
-	void atari_home();
+	void user_defined_homing();
 	void atari_home_task(void *pvParameters);
-	void tool_change(uint8_t new_tool);
+	void user_tool_change(uint8_t new_tool);
+	void user_defined_macro(uint8_t index);
+	void user_m30();
+	void atari_next_pen();
 	
 #endif

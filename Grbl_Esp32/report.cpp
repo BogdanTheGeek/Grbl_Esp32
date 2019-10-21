@@ -462,7 +462,7 @@ void report_gcode_modes(uint8_t client)
       case PROGRAM_FLOW_COMPLETED_M2 : 
       case PROGRAM_FLOW_COMPLETED_M30 : 
 			  sprintf(temp, " M%d", gc_state.modal.program_flow);
-				strcat(modes_rpt, temp);
+				strcat(modes_rpt, temp);			
         break;
     }
   }

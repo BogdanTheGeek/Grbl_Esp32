@@ -56,7 +56,7 @@ void machine_init()
 	ledcAttachPin(SOLENOID_PEN_PIN, SOLENOID_CHANNEL_NUM);
 		
 	pinMode(SOLENOID_DIRECTION_PIN, OUTPUT);  // this sets the direction of the solenoid current	
-	pinMode(X_LIMIT_PIN, INPUT_PULLUP); // external pullup required
+	pinMode(REED_SW_PIN, INPUT_PULLUP); // external pullup required
 	
 	// setup a task that will calculate solenoid position		
 	xTaskCreatePinnedToCore(	solenoidSyncTask,    // task
@@ -97,7 +97,7 @@ void solenoidSyncTask(void *pvParameters)
     }	
 }
 
-void atari_home() {
+void user_defined_homing() {
 	// create and start a task to do the special homing	
 	homing_phase = HOMING_PHASE_FULL_APPROACH;
 	atari_homing = true;			
@@ -129,23 +129,36 @@ void atari_home_task(void *pvParameters) {
 		if (atari_homing) {
 			// must be in idle or alarm state
 			if (sys.state == STATE_IDLE) {
-				switch(homing_phase) {
-					case HOMING_PHASE_FULL_APPROACH:					
-						sprintf(gcode_line, "G91G0X%3.2f\r", -ATARI_PAPER_WIDTH + ATARI_HOME_POS);
+				switch(homing_phase) { 
+					case HOMING_PHASE_FULL_APPROACH: // a full width move to insure it hits left end	
+						inputBuffer.push("G90G0Z1\r"); // lift the pen					
+						sprintf(gcode_line, "G91G0X%3.2f\r", -ATARI_PAPER_WIDTH + ATARI_HOME_POS - 3.0); // plus a little extra
 						inputBuffer.push(gcode_line);
 						homing_attempt = 1;
 						homing_phase = HOMING_PHASE_CHECK;
 					break;
-					case HOMING_PHASE_CHECK:
-						if (digitalRead(X_LIMIT_PIN) == 0) { // reed switch closes to ground														
+					case HOMING_PHASE_CHECK: // check the limits switch 
+						if (digitalRead(REED_SW_PIN) == 0) { // see if reed switch is grounded
+							inputBuffer.push("G4P0.1\n"); // dramtic pause
 							sys_position[X_AXIS] = ATARI_HOME_POS * settings.steps_per_mm[X_AXIS];
 							sys_position[Y_AXIS] = 0.0;
 							sys_position[Z_AXIS] = 1.0 * settings.steps_per_mm[Y_AXIS];
 							gc_sync_position();
 							plan_sync_position();
-							sprintf(gcode_line, "G90G0X%3.2f\r", ATARI_PAPER_WIDTH); // alway return to left side to reduce home travel stalls											
-							inputBuffer.push(gcode_line); // move to the 0,0 position
-							current_tool = 1;
+							///sprintf(gcode_line, "G0X%3.2f\r", -ATARI_HOME_POS); // return to zero
+							//inputBuffer.push(gcode_line);
+							//sys_position[X_AXIS] = 0,0;
+							//sys_position[Y_AXIS] = 0.0;
+							//sys_position[Z_AXIS] = 1.0 * settings.steps_per_mm[Y_AXIS];
+							//gc_sync_position();
+							//plan_sync_position();
+							//sprintf(gcode_line, "G10L20P0X0\r", -ATARI_HOME_POS); // return to zero
+							//inputBuffer.push("G90\n");
+							//inputBuffer.push("G4P1\n"); // dramtic pause
+							sprintf(gcode_line, "G90G0X%3.2f\r", ATARI_PAPER_WIDTH); // alway return to right side to reduce home travel stalls											
+							inputBuffer.push(gcode_line);
+							
+							current_tool = 1; // local copy for reference...until actual M6 change
 							gc_state.tool = current_tool;
 							atari_homing = false;  // done with homing sequence
 						}
@@ -167,7 +180,7 @@ void atari_home_task(void *pvParameters) {
 					break;
 				}	
 			
-				if (homing_attempt > 12) { // there are only 12 positions to try
+				if (homing_attempt > ATARI_HOMING_ATTEMPTS) { // try all positions plus 1
 					grbl_send(CLIENT_SERIAL, "[MSG: Atari homing failed]\r\n");
 					inputBuffer.push("G90\r");
 					atari_homing = false;;
@@ -215,7 +228,7 @@ void calc_solenoid(float penZ)
 	// ledcWrite appears to have issues with interrupts, so make this a critical section
 	portMUX_TYPE myMutex = portMUX_INITIALIZER_UNLOCKED;
 	portENTER_CRITICAL(&myMutex);
-		ledcWrite(SOLENOID_CHANNEL_NUM, solenoid_pen_pulse_len);		
+		ledcWrite(SOLENOID_CHANNEL_NUM, solenoid_pen_pulse_len);
 	portEXIT_CRITICAL(&myMutex);
 }
 
@@ -224,15 +237,15 @@ void calc_solenoid(float penZ)
 	A tool (pen) change is done by bumping the carriage against the right edge 3 times per
 	position change. Pen 1-4 is valid range.
 */
-void tool_change(uint8_t new_tool) {
+void user_tool_change(uint8_t new_tool) {
 	uint8_t move_count;
 	char gcode_line[20];		
 	
 	protocol_buffer_synchronize(); // wait for all previous moves to complete
 	
-	if ((new_tool < 1) || (new_tool < MAX_PEN_NUMBER)) {
-		grbl_sendf(CLIENT_SERIAL, "[MSG: Requested Pen#%d is out of 1-4 range]\r\n", new_tool);
-		return
+	if ((new_tool < 1) || (new_tool > MAX_PEN_NUMBER)) {
+		grbl_sendf(CLIENT_ALL, "[MSG: Requested Pen#%d is out of 1-4 range]\r\n", new_tool);
+		return;
 	}
 	
 	if (new_tool == current_tool)
@@ -244,7 +257,8 @@ void tool_change(uint8_t new_tool) {
 	else {
 		move_count = BUMPS_PER_PEN_CHANGE * ((MAX_PEN_NUMBER - current_tool) + new_tool);
 	}
-	
+	sprintf(gcode_line, "G0Z%3.2f\r", ATARI_TOOL_CHANGE_Z); // go to tool change height
+	inputBuffer.push(gcode_line);
 	for (uint8_t i = 0; i < move_count; i++) {	
 		sprintf(gcode_line, "G0X%3.2f\r", ATARI_HOME_POS); // 
 		inputBuffer.push(gcode_line);		
@@ -253,8 +267,61 @@ void tool_change(uint8_t new_tool) {
 	
 	current_tool = new_tool;
 	
-	grbl_sendf(CLIENT_SERIAL, "[MSG: Change to Pen#%d]\r\n", current_tool);
+	grbl_sendf(CLIENT_ALL, "[MSG: Change to Pen#%d]\r\n", current_tool);
 	
+}
+
+// move from current tool to next tool....
+void atari_next_pen() {	
+	if (current_tool < MAX_PEN_NUMBER) {
+		gc_state.tool = current_tool + 1;
+	}
+	else {
+		gc_state.tool = 1;
+	}	
+	user_tool_change(gc_state.tool);
+}
+
+// Polar coaster has macro buttons, this handles those button pushes.
+void user_defined_macro(uint8_t index)
+{
+	char gcode_line[20];
+	//grbl_sendf(CLIENT_SERIAL, "[MSG: Macro #%d]\r\n", index);
+	switch (index) {
+		#ifdef MACRO_BUTTON_0_PIN
+		case CONTROL_PIN_INDEX_MACRO_0:
+			grbl_send(CLIENT_SERIAL, "[MSG: Pen Switch]\r\n");
+			inputBuffer.push("$H\r");
+			
+		break;
+		#endif
+		
+		#ifdef MACRO_BUTTON_1_PIN
+		case CONTROL_PIN_INDEX_MACRO_1:
+			grbl_send(CLIENT_SERIAL, "[MSG: Color Switch]\r\n");
+			atari_next_pen();
+			sprintf(gcode_line, "G90G0X%3.2f\r", ATARI_PAPER_WIDTH); // alway return to right side to reduce home travel stalls											
+			inputBuffer.push(gcode_line);
+		break;
+		#endif
+		
+		#ifdef MACRO_BUTTON_2_PIN
+		case CONTROL_PIN_INDEX_MACRO_2:
+			grbl_send(CLIENT_SERIAL, "[MSG: Paper Switch]\r\n");			
+			inputBuffer.push("$J=G91 G21 F5000 Y-25\r");
+		break;
+		#endif		
+		
+		default:
+			grbl_sendf(CLIENT_SERIAL, "[MSG: Unknown Switch %d]\r\n", index);
+		break;
+	}
+}
+
+void user_m30() {
+	char gcode_line[20];
+	sprintf(gcode_line, "G90G0X%3.2f\r", ATARI_PAPER_WIDTH); // 
+	inputBuffer.push(gcode_line);
 }
 
 #endif

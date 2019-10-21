@@ -214,7 +214,7 @@ void mc_dwell(float seconds)
 void mc_homing_cycle(uint8_t cycle_mask)
 {
 	#ifdef USE_CUSTOM_HOMING
-		atari_home();
+		user_defined_homing();
 		return;
 	#endif
 	

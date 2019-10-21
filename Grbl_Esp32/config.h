@@ -57,11 +57,11 @@ Some features should not be changed. See notes below.
 // Serial baud rate
 #define BAUD_RATE 115200
 
-//#define ENABLE_BLUETOOTH // enable bluetooth ... turns of if $I= something
+#define ENABLE_BLUETOOTH // enable bluetooth ... turns of if $I= something
 
 #define ENABLE_SD_CARD // enable use of SD Card to run jobs
 
-//#define ENABLE_WIFI //enable wifi
+#define ENABLE_WIFI //enable wifi
 
 #define ENABLE_HTTP //enable HTTP and all related services
 #define ENABLE_OTA  //enable OTA
@@ -288,8 +288,7 @@ Some features should not be changed. See notes below.
 #define IGNORE_CONTROL_PINS
 
 //#define ENABLE_CONTROL_SW_DEBOUNCE // Default disabled. Uncomment to enable.
-#define CONTROL_SW_DEBOUNCE_PERIOD 32 // in milliseconds default 32 microseconds 
-
+#define CONTROL_SW_DEBOUNCE_PERIOD 100 // in milliseconds default 32 microseconds 
 
 // Inverts select limit pin states based on the following mask. This effects all limit pin functions,
 // such as hard limits and homing. However, this is different from overall invert limits setting.

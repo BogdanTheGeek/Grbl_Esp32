@@ -22,66 +22,95 @@
 #include "config.h"
 
 xQueueHandle control_sw_queue;  // used by control switch debouncing
+bool debouncing = false;  // debouncing in process
 
 void system_ini() // Renamed from system_init() due to conflict with esp32 files
 {	
 	// setup control inputs
-#ifndef IGNORE_CONTROL_PINS	
-	
-	#ifdef CONTROL_SAFETY_DOOR_PIN
-		pinMode(CONTROL_SAFETY_DOOR_PIN, INPUT);
-		attachInterrupt(digitalPinToInterrupt(CONTROL_SAFETY_DOOR_PIN), isr_control_inputs, CHANGE);
-	#endif
-	#ifdef CONTROL_RESET_PIN
-		pinMode(CONTROL_RESET_PIN, INPUT);
-		attachInterrupt(digitalPinToInterrupt(CONTROL_RESET_PIN), isr_control_inputs, CHANGE);
-	#endif
-	#ifdef CONTROL_FEED_HOLD_PIN
-		pinMode(CONTROL_FEED_HOLD_PIN, INPUT);
-		attachInterrupt(digitalPinToInterrupt(CONTROL_FEED_HOLD_PIN), isr_control_inputs, CHANGE);
-	#endif
-	#ifdef CONTROL_CYCLE_START_PIN
-		pinMode(CONTROL_CYCLE_START_PIN, INPUT);
-		attachInterrupt(digitalPinToInterrupt(CONTROL_CYCLE_START_PIN), isr_control_inputs, CHANGE);
-	#endif
-	
-	#ifdef MACRO_BUTTON_0_PIN
-		pinMode(MACRO_BUTTON_0_PIN, INPUT_PULLUP);
-		attachInterrupt(digitalPinToInterrupt(MACRO_BUTTON_0_PIN), isr_control_inputs, CHANGE);
-	#endif
-
-	#ifdef MACRO_BUTTON_1_PIN
-		pinMode(MACRO_BUTTON_1_PIN, INPUT_PULLUP);
-		attachInterrupt(digitalPinToInterrupt(MACRO_BUTTON_1_PIN), isr_control_inputs, CHANGE);
-	#endif
-
-	#ifdef MACRO_BUTTON_2_PIN
-		pinMode(MACRO_BUTTON_2_PIN, INPUT_PULLUP);
-		attachInterrupt(digitalPinToInterrupt(MACRO_BUTTON_2_PIN), isr_control_inputs, CHANGE);
-	#endif
-
-	#ifdef MACRO_BUTTON_3_PIN
-		pinMode(MACRO_BUTTON_3_PIN, INPUT_PULLUP);
-		attachInterrupt(digitalPinToInterrupt(MACRO_BUTTON_3_PIN), isr_control_inputs, CHANGE);
-	#endif
-	
-	#ifdef ENABLE_CONTROL_SW_DEBOUNCE
-		// setup task used for debouncing
-		control_sw_queue = xQueueCreate(10, sizeof( int ));
+	#ifndef IGNORE_CONTROL_PINS
 		
-		xTaskCreate(controlCheckTask, 
-					"controlCheckTask", 
-					2048, 
-					NULL, 
-					5, // priority 
-					NULL);
+		#ifdef CONTROL_SAFETY_DOOR_PIN
+			pinMode(CONTROL_SAFETY_DOOR_PIN, INPUT);
+			attachInterrupt(digitalPinToInterrupt(CONTROL_SAFETY_DOOR_PIN), isr_control_inputs, CHANGE);
+		#endif
+		#ifdef CONTROL_RESET_PIN
+			pinMode(CONTROL_RESET_PIN, INPUT);
+			attachInterrupt(digitalPinToInterrupt(CONTROL_RESET_PIN), isr_control_inputs, CHANGE);
+		#endif
+		#ifdef CONTROL_FEED_HOLD_PIN
+			pinMode(CONTROL_FEED_HOLD_PIN, INPUT);
+			attachInterrupt(digitalPinToInterrupt(CONTROL_FEED_HOLD_PIN), isr_control_inputs, CHANGE);
+		#endif
+		#ifdef CONTROL_CYCLE_START_PIN
+			pinMode(CONTROL_CYCLE_START_PIN, INPUT);
+			attachInterrupt(digitalPinToInterrupt(CONTROL_CYCLE_START_PIN), isr_control_inputs, CHANGE);
+		#endif
+		
+		#ifdef MACRO_BUTTON_0_PIN
+			grbl_send(CLIENT_SERIAL, "[MSG:Macro Pin 0]\r\n");
+			pinMode(MACRO_BUTTON_0_PIN, INPUT_PULLUP);
+			attachInterrupt(digitalPinToInterrupt(MACRO_BUTTON_0_PIN), isr_control_inputs, CHANGE);
+		#endif
+
+		#ifdef MACRO_BUTTON_1_PIN
+			grbl_send(CLIENT_SERIAL, "[MSG:Macro Pin 1]\r\n");
+			pinMode(MACRO_BUTTON_1_PIN, INPUT_PULLUP);
+			attachInterrupt(digitalPinToInterrupt(MACRO_BUTTON_1_PIN), isr_control_inputs, CHANGE);
+		#endif
+
+		#ifdef MACRO_BUTTON_2_PIN
+			grbl_send(CLIENT_SERIAL, "[MSG:Macro Pin 2]\r\n");
+			pinMode(MACRO_BUTTON_2_PIN, INPUT_PULLUP);
+			attachInterrupt(digitalPinToInterrupt(MACRO_BUTTON_2_PIN), isr_control_inputs, CHANGE);
+		#endif
+
+		#ifdef MACRO_BUTTON_3_PIN
+			grbl_send(CLIENT_SERIAL, "[MSG:Macro Pin 3]\r\n");
+			pinMode(MACRO_BUTTON_3_PIN, INPUT_PULLUP);
+			attachInterrupt(digitalPinToInterrupt(MACRO_BUTTON_3_PIN), isr_control_inputs, CHANGE);
+		#endif	
+		
+		#ifdef ENABLE_CONTROL_SW_DEBOUNCE
+			// setup task used for debouncing
+			control_sw_queue = xQueueCreate(10, sizeof( int ));
+			
+			xTaskCreate(controlCheckTask, 
+						"controlCheckTask", 
+						2048, 
+						NULL, 
+						5, // priority 
+						NULL);
+		#endif
+
 	#endif
 
-#endif
-   //customize pin definition if needed
-#if (GRBL_SPI_SS != -1) || (GRBL_SPI_MISO != -1) || (GRBL_SPI_MOSI != -1) || (GRBL_SPI_SCK != -1)
-    SPI.begin(GRBL_SPI_SCK, GRBL_SPI_MISO, GRBL_SPI_MOSI, GRBL_SPI_SS);
-#endif 
+	//customize pin definition if needed
+	#if (GRBL_SPI_SS != -1) || (GRBL_SPI_MISO != -1) || (GRBL_SPI_MOSI != -1) || (GRBL_SPI_SCK != -1)
+		SPI.begin(GRBL_SPI_SCK, GRBL_SPI_MISO, GRBL_SPI_MOSI, GRBL_SPI_SS);
+	#endif 
+
+	// Setup USER_DIGITAL_PINs controlled by M62 and M63
+	#ifdef USER_DIGITAL_PIN_1
+		pinMode(USER_DIGITAL_PIN_1, OUTPUT);
+		sys_io_control(1<<1, false); // turn off
+	#endif
+
+	#ifdef USER_DIGITAL_PIN_2
+		pinMode(USER_DIGITAL_PIN_2, OUTPUT);
+		sys_io_control(1<<2, false); // turn off
+	#endif
+
+	#ifdef USER_DIGITAL_PIN_3
+		pinMode(USER_DIGITAL_PIN_3, OUTPUT);
+		sys_io_control(1<<3, false); // turn off
+	#endif
+
+	#ifdef USER_DIGITAL_PIN_4
+		pinMode(USER_DIGITAL_PIN_4, OUTPUT);
+		sys_io_control(1<<4, false); // turn off
+	#endif
+	
+	
 }
 
 #ifdef ENABLE_CONTROL_SW_DEBOUNCE
@@ -90,23 +119,27 @@ void controlCheckTask(void *pvParameters)
 {	
 	while(true) {
 		int evt;
-		xQueueReceive(control_sw_queue, &evt, portMAX_DELAY); // block until receive queue
-		vTaskDelay( CONTROL_SW_DEBOUNCE_PERIOD / portTICK_PERIOD_MS ); // delay a while
-		
+		xQueueReceive(control_sw_queue, &evt, portMAX_DELAY); // block until receive queue		
+		vTaskDelay(CONTROL_SW_DEBOUNCE_PERIOD); // delay a while
 		uint8_t pin = system_control_get_state();
+		
 		if (pin) {			
 			system_exec_control_pin(pin);
 		}
+		debouncing = false;
 	}
 }
 #endif
 
 void IRAM_ATTR isr_control_inputs()
-{  
+{  	
 	#ifdef ENABLE_CONTROL_SW_DEBOUNCE
 		// we will start a task that will recheck the switches after a small delay
 		int evt;
-		xQueueSendFromISR(control_sw_queue, &evt, NULL);	
+		if (!debouncing) { // prevent resending until debounce is done
+			debouncing = true;
+			xQueueSendFromISR(control_sw_queue, &evt, NULL);
+		}		
 	#else
 		uint8_t pin = system_control_get_state();
 		system_exec_control_pin(pin);
@@ -485,9 +518,10 @@ uint8_t system_control_get_state()
 	#endif
 	
 	
+	
   #ifdef INVERT_CONTROL_PIN_MASK
     control_state ^= (INVERT_CONTROL_PIN_MASK & defined_pin_mask);
-  #endif  
+  #endif
 	  
   return(control_state);  
 }
@@ -518,20 +552,20 @@ void system_exec_control_pin(uint8_t pin) {
 		bit_true(sys_rt_exec_state, EXEC_FEED_HOLD);    
 	}		
 	else if (bit_istrue(pin,CONTROL_PIN_INDEX_SAFETY_DOOR)) {
-		bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);    
+		bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);  
 	}
 	#ifdef MACRO_BUTTON_0_PIN
-	else if (pin == 96) {	
+	else if (bit_istrue(pin,CONTROL_PIN_INDEX_MACRO_0)) {	
 		user_defined_macro(CONTROL_PIN_INDEX_MACRO_0); // function must be implemented by user 
 	}
 	#endif
 	#ifdef MACRO_BUTTON_1_PIN
-	else if (pin == 80) {
+	else if (bit_istrue(pin,CONTROL_PIN_INDEX_MACRO_1)) {
 		user_defined_macro(CONTROL_PIN_INDEX_MACRO_1); // function must be implemented by user 
 	}
 	#endif
 	#ifdef MACRO_BUTTON_2_PIN
-	else if (pin == 48) {
+	else if (bit_istrue(pin,CONTROL_PIN_INDEX_MACRO_2)) {
 		user_defined_macro(CONTROL_PIN_INDEX_MACRO_2); // function must be implemented by user 
 	}
 	#endif
@@ -552,4 +586,33 @@ int32_t system_convert_corexy_to_y_axis_steps(int32_t *steps)
 	return( (steps[A_MOTOR] - steps[B_MOTOR])/2 );
 }
 
-
+// io_num is the virtual pin# and has nothing to do with the actual esp32 GPIO_NUM_xx
+// It uses a mask so all can be turned of in ms_reset
+void sys_io_control(uint8_t io_num_mask, bool turnOn) {
+	protocol_buffer_synchronize();
+	#ifdef USER_DIGITAL_PIN_1
+		if (io_num_mask & 1<<1) {
+			digitalWrite(USER_DIGITAL_PIN_1, turnOn);
+			return;
+		}
+	#endif
+	#ifdef USER_DIGITAL_PIN_2
+		if (io_num_mask & 1<<2) {
+			digitalWrite(USER_DIGITAL_PIN_2, turnOn);
+			return;
+		}
+	#endif
+	#ifdef USER_DIGITAL_PIN_3
+		if (io_num_mask & 1<<3) {
+			digitalWrite(USER_DIGITAL_PIN_3, turnOn);
+			return;
+		}
+	#endif
+	#ifdef USER_DIGITAL_PIN_4
+		if (io_num_mask & 1<<4) {
+			digitalWrite(USER_DIGITAL_PIN_4, turnOn);
+			return;
+		}
+	#endif
+	grbl_sendf(CLIENT_SERIAL, "[MSG:Undefined IO pin...%d]\r\n", io_num_mask);
+}
