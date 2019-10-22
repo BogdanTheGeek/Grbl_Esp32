@@ -97,6 +97,9 @@ void solenoidSyncTask(void *pvParameters)
     }	
 }
 
+// to do...have this return a true or false. This could be used by the normal homing feature to
+// continue with regular homing after setup 
+
 void user_defined_homing() {
 	// create and start a task to do the special homing	
 	homing_phase = HOMING_PHASE_FULL_APPROACH;
