@@ -31,11 +31,19 @@
 #define SPINDLE_STATE_DISABLE  0  // Must be zero.
 #define SPINDLE_STATE_CW       bit(0)
 #define SPINDLE_STATE_CCW      bit(1)
+
+#define SPINDLE_FEEDBACK_MODE RISING
+#define SPINDLE_PID_UPDATE_PERIOD 0.02 // in s
+#define SPINDLE_PID_KP  5
+#define SPINDLE_PID_KI  1
+#define SPINDLE_PID_KD  1
   
   void spindle_init();
   void spindle_stop();
   uint8_t spindle_get_state();
   void spindle_set_speed(uint32_t pwm_value);
+  void spindle_pid_isr();
+  void spindle_feedback_isr();
   uint32_t spindle_compute_pwm_value(float rpm);
   void spindle_set_state(uint8_t state, float rpm);
   void spindle_sync(uint8_t state, float rpm);

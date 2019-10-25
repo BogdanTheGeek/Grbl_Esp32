@@ -24,6 +24,11 @@
 static float pwm_gradient; // Precalulated value to speed up rpm to PWM conversions.
 #endif
 
+volatile int pulse_counter;
+float target_rpm;
+ 
+hw_timer_t * pid_update_timer = NULL;
+
 void spindle_init()
 {
 	#ifdef SPINDLE_PWM_PIN
@@ -42,6 +47,16 @@ void spindle_init()
 		// Use DIR and Enable if pins are defined
 		#ifdef SPINDLE_ENABLE_PIN
 			pinMode(SPINDLE_ENABLE_PIN, OUTPUT);
+		#endif
+
+		#ifdef SPINDLE_FEEDBACK_PIN
+			pinMode(SPINDLE_FEEDBACK_PIN, INPUT);
+			attachInterrupt(SPINDLE_FEEDBACK_PIN, spindle_feedback_isr, SPINDLE_FEEDBACK_MODE);
+
+			pid_update_timer = timerBegin(0, 80, true);
+			timerAttachInterrupt(pid_update_timer, &spindle_pid_isr, true);
+			timerAlarmWrite(pid_update_timer, (int)(SPINDLE_PID_UPDATE_PERIOD*1000000), true);
+			timerAlarmEnable(pid_update_timer);
 		#endif
 		
 		#ifdef SPINDLE_DIR_PIN
@@ -94,25 +109,62 @@ uint8_t spindle_get_state()  // returns SPINDLE_STATE_DISABLE, SPINDLE_STATE_CW 
 	#endif
 }
 
-void spindle_set_speed(uint32_t pwm_value)
+void spindle_set_speed(uint32_t speed_value)
 {	
 	#ifndef SPINDLE_PWM_PIN
 		return;
 	#else
+		#ifdef SPINDLE_FEEDBACK_PIN
+		speed_value = spindle_compute_pwm_value(speed_value);
+		#endif
+
 		#ifndef SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED
 			spindle_set_enable(true);
 		#else
-			spindle_set_enable(pwm_value != 0);
+			spindle_set_enable(speed_value != 0);
 		#endif
 		
 		#ifndef INVERT_SPINDLE_PWM
-			grbl_analogWrite(SPINDLE_PWM_CHANNEL, pwm_value);			
+			#ifndef SPINDLE_FEEDBACK_PIN 
+			grbl_analogWrite(SPINDLE_PWM_CHANNEL, speed_value);	
+			#else
+			target_rpm = speed_value;
+			#endif	
 		#else
-			grbl_analogWrite(SPINDLE_PWM_CHANNEL, (1<<SPINDLE_PWM_BIT_PRECISION) - pwm_value);
+			#ifndef SPINDLE_FEEDBACK_PIN 
+			grbl_analogWrite(SPINDLE_PWM_CHANNEL, (1<<SPINDLE_PWM_BIT_PRECISION) - speed_value);
+			#else
+			target_rpm = speed_value;	
+			#endif
 		#endif
 		
 	#endif
 	
+}
+
+void IRAM_ATTR spindle_pid_isr()
+{
+	static uint32_t pwm_value;
+	static float last_e;
+
+	int rpm = 60*pulse_counter/SPINDLE_PID_UPDATE_PERIOD;
+	pulse_counter = 0;
+
+	float e = target_rpm - rpm;
+
+	pwm_value += SPINDLE_PID_KP*e + SPINDLE_PID_KD*(e - last_e)/SPINDLE_PID_UPDATE_PERIOD + SPINDLE_PID_KI*e*SPINDLE_PID_UPDATE_PERIOD;
+
+	if (pwm_value >= SPINDLE_PWM_MAX_VALUE)
+		pwm_value = SPINDLE_PWM_MAX_VALUE;
+	if (pwm_value <= SPINDLE_PWM_MIN_VALUE)
+		pwm_value = SPINDLE_PWM_MIN_VALUE;
+
+	grbl_analogWrite(SPINDLE_PWM_CHANNEL, pwm_value);
+}
+
+void IRAM_ATTR spindle_feedback_isr()
+{
+	pulse_counter++;
 }
 
 uint32_t spindle_compute_pwm_value(float rpm){
@@ -173,7 +225,7 @@ void spindle_set_state(uint8_t state, float rpm)
 			if (state == SPINDLE_ENABLE_CCW) { rpm = 0.0; } // TODO: May need to be rpm_min*(100/MAX_SPINDLE_SPEED_OVERRIDE);
 		  }
 							
-		  spindle_set_speed(spindle_compute_pwm_value(rpm));     
+		  spindle_set_speed(rpm);     
 	  }  
 	  sys.report_ovr_counter = 0; // Set to report change immediately
 	#endif
