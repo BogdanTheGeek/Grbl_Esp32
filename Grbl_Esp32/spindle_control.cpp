@@ -28,6 +28,7 @@ volatile int pulse_counter;
 float target_rpm;
  
 hw_timer_t * pid_update_timer = NULL;
+static xQueueHandle pid_queue = NULL;
 
 void spindle_init()
 {
@@ -50,13 +51,16 @@ void spindle_init()
 		#endif
 
 		#ifdef SPINDLE_FEEDBACK_PIN
-			pinMode(SPINDLE_FEEDBACK_PIN, INPUT);
+			pinMode(SPINDLE_FEEDBACK_PIN, INPUT_PULLUP);
 			attachInterrupt(SPINDLE_FEEDBACK_PIN, spindle_feedback_isr, SPINDLE_FEEDBACK_MODE);
 
-			pid_update_timer = timerBegin(0, 80, true);
+			pid_update_timer = timerBegin(SPINDLE_PID_TIMER, 80, true);
 			timerAttachInterrupt(pid_update_timer, &spindle_pid_isr, true);
 			timerAlarmWrite(pid_update_timer, (int)(SPINDLE_PID_UPDATE_PERIOD*1000000), true);
 			timerAlarmEnable(pid_update_timer);
+
+			pid_queue = xQueueCreate(20, sizeof(int));
+			xTaskCreate(&spindle_pid_task, "spindle_pid_task", 4096, NULL, 10, NULL);
 		#endif
 		
 		#ifdef SPINDLE_DIR_PIN
@@ -114,7 +118,7 @@ void spindle_set_speed(uint32_t speed_value)
 	#ifndef SPINDLE_PWM_PIN
 		return;
 	#else
-		#ifdef SPINDLE_FEEDBACK_PIN
+		#ifndef SPINDLE_FEEDBACK_PIN
 		speed_value = spindle_compute_pwm_value(speed_value);
 		#endif
 
@@ -142,24 +146,38 @@ void spindle_set_speed(uint32_t speed_value)
 	
 }
 
-void IRAM_ATTR spindle_pid_isr()
+void spindle_pid_task(void *pvParameters)
 {
 	static uint32_t pwm_value;
 	static float last_e;
+	static int last_pulses;
+	int pulses;
 
-	int rpm = 60*pulse_counter/SPINDLE_PID_UPDATE_PERIOD;
+	while(1){
+		if(xQueueReceive(pid_queue, &pulses, portMAX_DELAY) && (pulses != last_pulses)){
+			int rpm = 60*pulses/SPINDLE_PID_UPDATE_PERIOD;
+			last_pulses = pulses;
+			float e = target_rpm - rpm;
+
+			pwm_value += SPINDLE_PID_KP*e + SPINDLE_PID_KD*(e - last_e)/SPINDLE_PID_UPDATE_PERIOD + SPINDLE_PID_KI*e*SPINDLE_PID_UPDATE_PERIOD;
+
+			if (pwm_value >= SPINDLE_PWM_MAX_VALUE)
+				pwm_value = SPINDLE_PWM_MAX_VALUE;
+			if (pwm_value <= SPINDLE_PWM_MIN_VALUE)
+				pwm_value = SPINDLE_PWM_MIN_VALUE;
+
+			grbl_analogWrite(SPINDLE_PWM_CHANNEL, pwm_value);
+		}
+	}
+
+	
+}
+
+void IRAM_ATTR spindle_pid_isr()
+{
+	int pulses = pulse_counter;
 	pulse_counter = 0;
-
-	float e = target_rpm - rpm;
-
-	pwm_value += SPINDLE_PID_KP*e + SPINDLE_PID_KD*(e - last_e)/SPINDLE_PID_UPDATE_PERIOD + SPINDLE_PID_KI*e*SPINDLE_PID_UPDATE_PERIOD;
-
-	if (pwm_value >= SPINDLE_PWM_MAX_VALUE)
-		pwm_value = SPINDLE_PWM_MAX_VALUE;
-	if (pwm_value <= SPINDLE_PWM_MIN_VALUE)
-		pwm_value = SPINDLE_PWM_MIN_VALUE;
-
-	grbl_analogWrite(SPINDLE_PWM_CHANNEL, pwm_value);
+	xQueueSendFromISR(pid_queue, &pulses, NULL);
 }
 
 void IRAM_ATTR spindle_feedback_isr()

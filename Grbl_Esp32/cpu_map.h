@@ -287,7 +287,7 @@
     	// won't affect operation except that there will be no output
 		// form the pins. Grbl will virtually move the axis. This could 
 		// be handy if you are using a servo, etc. for another axis.
-		#define CPU_MAP_NAME "CPU_MAP_ESP32_ESC_SPINDLE"	
+		#define CPU_MAP_NAME "CPU_MAP_ESP32_ESC_SPINDLE_PID"	
 		
 		#define X_STEP_PIN      	GPIO_NUM_12
 		#define X_DIRECTION_PIN  	GPIO_NUM_26
