@@ -30,6 +30,8 @@
 #include <freertos/task.h>
 
 #include "driver/timer.h"
+#include "driver/pcnt.h"
+#include "esp_timer.h"
 
 // Define the Grbl system include files. NOTE: Do not alter organization.
 #include "config.h"

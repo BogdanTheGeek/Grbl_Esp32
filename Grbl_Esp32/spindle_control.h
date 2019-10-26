@@ -21,7 +21,7 @@
 #ifndef spindle_control_h
   #define spindle_control_h
   
-  #include "grbl.h"
+#include "grbl.h"
   
 #define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE-SPINDLE_PWM_MIN_VALUE)
 
@@ -33,7 +33,7 @@
 #define SPINDLE_STATE_CCW      bit(1)
 
 #define SPINDLE_PID_TIMER 3
-#define SPINDLE_FEEDBACK_MODE RISING
+#define SPINDLE_PULSE_UNIT PCNT_UNIT_0
 #define SPINDLE_PID_UPDATE_PERIOD 0.2 // in s
 #define SPINDLE_PID_KP  5
 #define SPINDLE_PID_KI  0
@@ -44,8 +44,6 @@
   uint8_t spindle_get_state();
   void spindle_set_speed(uint32_t pwm_value);
   void spindle_pid_task(void *pvParameters);
-  void spindle_pid_isr();
-  void spindle_feedback_isr();
   uint32_t spindle_compute_pwm_value(float rpm);
   void spindle_set_state(uint8_t state, float rpm);
   void spindle_sync(uint8_t state, float rpm);
